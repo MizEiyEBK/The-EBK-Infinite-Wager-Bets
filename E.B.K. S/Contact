@@ -1,0 +1,66 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+contract InfiniteLeverageContract {
+    address public owner;
+    uint256 public totalWagered;
+    uint256 public remainingETH;
+
+    mapping(address => uint256) public bets;
+    mapping(address => uint256) public leverageFactors;
+
+    event BetPlaced(address indexed user, uint256 amount, uint256 leverage);
+
+    constructor() {
+        owner = msg.sender;
+        remainingETH = address(this).balance;
+    }
+
+    modifier onlyOwner() {
+        require(msg.sender == owner, "Only the contract owner can call this function");
+        _;
+    }
+
+    function placeBet(uint256 amount, uint256 leverage) external payable {
+        require(amount > 0, "Amount must be greater than 0");
+        require(msg.value == amount, "Sent ETH amount must match the specified wager");
+        require(leverage > 0, "Leverage factor must be greater than 0");
+
+        bets[msg.sender] += amount;
+        leverageFactors[msg.sender] = leverage;
+        totalWagered += amount;
+        emit BetPlaced(msg.sender, amount, leverage);
+    }
+
+    function checkOutcome(bool outcomeHappened) external onlyOwner {
+        if (outcomeHappened) {
+            // Distribute remaining ETH to winning users
+            uint256 winnings = remainingETH;
+            remainingETH = 0;
+            for (address user : getAllUsers()) {
+                uint256 userBet = bets[user];
+                uint256 userLeverage = leverageFactors[user];
+                if (userBet > 0) {
+                    uint256 userShare = (userBet * userLeverage * winnings) / totalWagered;
+                    payable(user).transfer(userShare);
+                }
+            }
+        } else {
+            // Outcome didn't happen; owner can withdraw the wagered amount
+            payable(owner).transfer(totalWagered);
+        }
+    }
+
+    function getAllUsers() internal view returns (address[] memory) {
+        // Helper function to get all users who placed bets
+        // You can optimize this based on your use case
+        // For simplicity, we're not handling edge cases (e.g., duplicate bets)
+        address[] memory users = new address;
+        uint256 index = 0;
+        for (address user : bets) {
+            users[index] = user;
+            index++;
+        }
+        return users;
+    }
+}
